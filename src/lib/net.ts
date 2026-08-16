@@ -4,21 +4,21 @@
 //   - SupabaseTransport: real 2-browser play over Realtime broadcast.
 //   - LocalAiTransport:  single-device practice against a shouting AI.
 
-import type { StatePayload } from './game'
-import { openRoomChannel } from './supabase'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { StatePayload } from "./game"
+import { openRoomChannel } from "./supabase"
+import type { RealtimeChannel } from "@supabase/supabase-js"
 
-export type TransportEvent = 'peer-join' | 'peer-leave' | 'intensity' | 'state'
-export type Role = 'host' | 'guest'
+export type TransportEvent = "peer-join" | "peer-leave" | "intensity" | "state"
+export type Role = "host" | "guest"
 
 export interface Transport {
-  readonly kind: 'supabase' | 'local'
+  readonly kind: "supabase" | "local"
   connect: () => Promise<void>
   /** guest -> host */
   sendIntensity: (v: number) => void
   /** host -> guest */
   sendState: (s: StatePayload) => void
-  on: (ev: 'peer-join' | 'peer-leave', cb: () => void) => void
+  on: (ev: "peer-join" | "peer-leave", cb: () => void) => void
   onIntensity: (cb: (v: number) => void) => void
   onState: (cb: (s: StatePayload) => void) => void
   disconnect: () => void
@@ -27,9 +27,9 @@ export interface Transport {
 // ---------------------------------------------------------------------------
 
 export class SupabaseTransport implements Transport {
-  readonly kind = 'supabase' as const
+  readonly kind = "supabase" as const
   private channel: RealtimeChannel | null = null
-  private handlers: Record<string, (() => void)[]> = {}
+  private handlers: Record<string, () => void[]> = {}
   private intensityCb: ((v: number) => void) | null = null
   private stateCb: ((s: StatePayload) => void) | null = null
   private peers = 0
@@ -41,44 +41,44 @@ export class SupabaseTransport implements Transport {
 
   async connect() {
     const channel = await openRoomChannel(this.roomCode)
-    if (!channel) throw new Error('Supabase is not connected')
+    if (!channel) throw new Error("Supabase is not connected")
     this.channel = channel
 
-    channel.on('broadcast', { event: 'intensity' }, ({ payload }) => {
+    channel.on("broadcast", { event: "intensity" }, ({ payload }) => {
       this.intensityCb?.(payload.v as number)
     })
-    channel.on('broadcast', { event: 'state' }, ({ payload }) => {
+    channel.on("broadcast", { event: "state" }, ({ payload }) => {
       this.stateCb?.(payload as StatePayload)
     })
-    channel.on('presence', { event: 'join' }, () => {
+    channel.on("presence", { event: "join" }, () => {
       this.peers = Object.keys(channel.presenceState()).length
-      if (this.peers > 1) this.emit('peer-join')
+      if (this.peers > 1) this.emit("peer-join")
     })
-    channel.on('presence', { event: 'leave' }, () => {
+    channel.on("presence", { event: "leave" }, () => {
       this.peers = Object.keys(channel.presenceState()).length
-      this.emit('peer-leave')
+      this.emit("peer-leave")
     })
 
     await new Promise<void>((resolve, reject) => {
       channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
+        if (status === "SUBSCRIBED") {
           channel.track({ role: this.role, at: Date.now() })
           // If a peer is already present (guest joined an occupied room).
           this.peers = Object.keys(channel.presenceState()).length
-          if (this.peers > 1) this.emit('peer-join')
+          if (this.peers > 1) this.emit("peer-join")
           resolve()
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          reject(new Error('Could not join room'))
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          reject(new Error("Could not join room"))
         }
       })
     })
   }
 
-  private emit(ev: 'peer-join' | 'peer-leave') {
+  private emit(ev: "peer-join" | "peer-leave") {
     this.handlers[ev]?.forEach((cb) => cb())
   }
 
-  on(ev: 'peer-join' | 'peer-leave', cb: () => void) {
+  on(ev: "peer-join" | "peer-leave", cb: () => void) {
     ;(this.handlers[ev] ||= []).push(cb)
   }
   onIntensity(cb: (v: number) => void) {
@@ -88,10 +88,14 @@ export class SupabaseTransport implements Transport {
     this.stateCb = cb
   }
   sendIntensity(v: number) {
-    this.channel?.send({ type: 'broadcast', event: 'intensity', payload: { v } })
+    this.channel?.send({
+      type: "broadcast",
+      event: "intensity",
+      payload: { v },
+    })
   }
   sendState(s: StatePayload) {
-    this.channel?.send({ type: 'broadcast', event: 'state', payload: s })
+    this.channel?.send({ type: "broadcast", event: "state", payload: s })
   }
   disconnect() {
     this.channel?.unsubscribe()
@@ -103,7 +107,7 @@ export class SupabaseTransport implements Transport {
 
 /** Practice opponent: fluctuating shouts with occasional strong surges. */
 export class LocalAiTransport implements Transport {
-  readonly kind = 'local' as const
+  readonly kind = "local" as const
   private intensityCb: ((v: number) => void) | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private t = 0
@@ -118,7 +122,8 @@ export class LocalAiTransport implements Transport {
       this.t += 0.12
       if (Math.random() < 0.04) this.surge = 0.6 + Math.random() * 0.4
       this.surge *= 0.9
-      const base = this.difficulty * (0.5 + 0.5 * Math.abs(Math.sin(this.t * 1.3)))
+      const base =
+        this.difficulty * (0.5 + 0.5 * Math.abs(Math.sin(this.t * 1.3)))
       const noise = (Math.random() - 0.5) * 0.15
       const v = Math.max(0, Math.min(1, base + this.surge + noise))
       this.intensityCb?.(v)
@@ -126,8 +131,8 @@ export class LocalAiTransport implements Transport {
   }
 
   private peerJoin: (() => void) | null = null
-  on(ev: 'peer-join' | 'peer-leave', cb: () => void) {
-    if (ev === 'peer-join') this.peerJoin = cb
+  on(ev: "peer-join" | "peer-leave", cb: () => void) {
+    if (ev === "peer-join") this.peerJoin = cb
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb

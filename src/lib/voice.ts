@@ -17,7 +17,7 @@ export interface VoiceController {
   calibrateNoiseFloor: (ms?: number) => Promise<number>
   /** Measure the loudest reading over `ms` (user shouts) and store it as peak. */
   calibratePeak: (ms?: number) => Promise<number>
-  getCalibration: () => { noiseFloor: number; userPeak: number }
+  getCalibration: () => { noiseFloor: number userPeak: number }
   stop: () => void
 }
 
@@ -33,25 +33,33 @@ export interface VoiceOptions {
 const VOICE_LO = 300 // Hz
 const VOICE_HI = 3000 // Hz
 
-export async function startMic(opts: VoiceOptions = {}): Promise<VoiceController> {
+export async function startMic(
+  opts: VoiceOptions = {},
+): Promise<VoiceController> {
   const { attackMs = 25, releaseMs = 50, gateMargin = 0.15 } = opts
   const attackTau = attackMs / 1000
   const releaseTau = releaseMs / 1000
 
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
   })
 
   const AudioCtx =
-    window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext })
+      .webkitAudioContext
   const ctx = new AudioCtx()
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state === "suspended") void ctx.resume()
 
   const source = ctx.createMediaStreamSource(stream)
 
   // High-pass removes low-frequency rumble/plosives before analysis.
   const highpass = ctx.createBiquadFilter()
-  highpass.type = 'highpass'
+  highpass.type = "highpass"
   highpass.frequency.value = 170
   highpass.Q.value = 0.707
 
@@ -64,7 +72,10 @@ export async function startMic(opts: VoiceOptions = {}): Promise<VoiceController
   const freq = new Uint8Array(analyser.frequencyBinCount)
   const binHz = ctx.sampleRate / analyser.fftSize
   const loBin = Math.max(1, Math.floor(VOICE_LO / binHz))
-  const hiBin = Math.min(analyser.frequencyBinCount - 1, Math.ceil(VOICE_HI / binHz))
+  const hiBin = Math.min(
+    analyser.frequencyBinCount - 1,
+    Math.ceil(VOICE_HI / binHz),
+  )
 
   // Average the voice-band bins, normalized to 0..1.
   const readBand = () => {
@@ -107,7 +118,11 @@ export async function startMic(opts: VoiceOptions = {}): Promise<VoiceController
   })
 
   // Sample rawBand over a window; `reducer` folds each sample into a result.
-  const sampleWindow = (ms: number, seed: number, reducer: (acc: number, v: number, n: number) => number) =>
+  const sampleWindow = (
+    ms: number,
+    seed: number,
+    reducer: (acc: number, v: number, n: number) => number,
+  ) =>
     new Promise<number>((resolve) => {
       let acc = seed
       let n = 0
