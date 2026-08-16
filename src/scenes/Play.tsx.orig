@@ -14,7 +14,6 @@ import type { Transport } from "../lib/net"
 import type { VoiceController } from "../lib/voice"
 import type { Winner } from "../lib/game"
 import { useTransform, MotionValue } from "framer-motion"
-import bgMusic from "../imports/Aadeda_Aattam_Nee_Video_Song___Vadam_Vali_Song___Aadu_2___Shaan_Rahman___Jayasurya___Vijay_Babu.mp3"
 
 interface PlayProps {
   role: "host" | "guest"
@@ -236,8 +235,6 @@ export default function Play({
           </button>
         </div>
       )}
-
-      {active && <audio src={bgMusic} autoPlay loop />}
     </div>
   )
 }

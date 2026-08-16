@@ -11,6 +11,7 @@ import type { VoiceController } from "./lib/voice"
 type Scene = "landing" | "lobby" | "play" | "win"
 
 interface Session {
+  startAt?: number
   role: "host" | "guest"
   mode: "online" | "local"
   roomCode: string
@@ -79,7 +80,8 @@ export default function App() {
     setScene("lobby")
   }
 
-  const handleStart = (voice: VoiceController | null) => {
+  const handleStart = (voice: VoiceController | null, startAt: number) => {
+    setSession((s) => (s ? { ...s, startAt } : null))
     voiceRef.current = voice
     setRound((r) => r + 1)
     setScene("play")
@@ -128,6 +130,7 @@ export default function App() {
           voice={voiceRef.current}
           playerName={session.playerName}
           opponentName={session.opponentName}
+          startAt={session.startAt || Date.now()}
           onWin={handleWin}
           onExit={goHome}
         />
@@ -140,6 +143,7 @@ export default function App() {
           mode={session.mode}
           playerName={session.playerName}
           opponentName={session.opponentName}
+          startAt={session.startAt || Date.now()}
           onPlayAgain={playAgain}
           onNewRoom={goHome}
         />

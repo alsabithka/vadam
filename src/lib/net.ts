@@ -8,7 +8,7 @@ import type { StatePayload } from "./game"
 import { openRoomChannel } from "./supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 
-export type TransportEvent = "peer-join" | "peer-leave" | "intensity" | "state"
+export type TransportEvent = "peer-join" | "peer-leave" | "intensity" | "state" | "match-start"
 export type Role = "host" | "guest"
 
 export interface Transport {
@@ -18,9 +18,11 @@ export interface Transport {
   sendIntensity: (v: number) => void
   /** host -> guest */
   sendState: (s: StatePayload) => void
+  sendMatchStart: (startAt: number) => void
   on: (ev: "peer-join" | "peer-leave", cb: () => void) => void
   onIntensity: (cb: (v: number) => void) => void
   onState: (cb: (s: StatePayload) => void) => void
+  onMatchStart: (cb: (startAt: number) => void) => void
   disconnect: () => void
 }
 
@@ -32,6 +34,7 @@ export class SupabaseTransport implements Transport {
   private handlers: Record<string, () => void[]> = {}
   private intensityCb: ((v: number) => void) | null = null
   private stateCb: ((s: StatePayload) => void) | null = null
+  private matchStartCb: ((startAt: number) => void) | null = null
   private peers = 0
 
   constructor(
@@ -46,6 +49,9 @@ export class SupabaseTransport implements Transport {
 
     channel.on("broadcast", { event: "intensity" }, ({ payload }) => {
       this.intensityCb?.(payload.v as number)
+    })
+    channel.on("broadcast", { event: "match-start" }, ({ payload }) => {
+      this.matchStartCb?.(payload.startAt as number)
     })
     channel.on("broadcast", { event: "state" }, ({ payload }) => {
       this.stateCb?.(payload as StatePayload)
@@ -84,6 +90,9 @@ export class SupabaseTransport implements Transport {
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
   }
+  onMatchStart(cb: (startAt: number) => void) {
+    this.matchStartCb = cb
+  }
   onState(cb: (s: StatePayload) => void) {
     this.stateCb = cb
   }
@@ -92,6 +101,13 @@ export class SupabaseTransport implements Transport {
       type: "broadcast",
       event: "intensity",
       payload: { v },
+    })
+  }
+  sendMatchStart(startAt: number) {
+    this.channel?.send({
+      type: "broadcast",
+      event: "match-start",
+      payload: { startAt },
     })
   }
   sendState(s: StatePayload) {
@@ -131,16 +147,23 @@ export class LocalAiTransport implements Transport {
   }
 
   private peerJoin: (() => void) | null = null
+  private matchStartCb: ((startAt: number) => void) | null = null
   on(ev: "peer-join" | "peer-leave", cb: () => void) {
     if (ev === "peer-join") this.peerJoin = cb
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
   }
+  onMatchStart(cb: (startAt: number) => void) {
+    this.matchStartCb = cb
+  }
   onState() {
     /* no remote peer to inform */
   }
   sendIntensity() {}
+  sendMatchStart(startAt: number) {
+    this.matchStartCb?.(startAt)
+  }
   sendState() {}
   disconnect() {
     if (this.timer) clearInterval(this.timer)

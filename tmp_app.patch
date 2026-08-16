@@ -1,0 +1,28 @@
+@@ -62,7 +62,7 @@
+     setScene("lobby")
+   }
+
+-  const handleStart = (voice: VoiceController | null) => {
++  const handleStart = (voice: VoiceController | null, startAt: number) => {
+     voiceRef.current = voice
+     setRound((r) => r + 1)
++    setSession(s => s ? { ...s, startAt } : null)
+     setScene("play")
+   }
+@@ -21,6 +21,7 @@
+   playerName: string
+   opponentName: string
+   transport: Transport
++  startAt?: number
+ }
+
+ export default function App() {
+@@ -99,6 +100,7 @@
+           transport={session.transport}
+           voice={voiceRef.current}
+           playerName={session.playerName}
+           opponentName={session.opponentName}
++          startAt={session.startAt || Date.now()}
+           onWin={handleWin}
+           onExit={goHome}
+         />
