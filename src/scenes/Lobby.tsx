@@ -73,13 +73,14 @@ export default function Lobby({
     await voiceRef.current?.calibrateNoiseFloor(1000)
     setCalib("quiet-done")
   }
+  const handleStart = () => {
+    if (role === "guest") return
+    const startAt = Date.now() + 1500
+    transport.sendMatchStart(startAt)
+    onStart(voiceRef.current, startAt)
+  }
+
   const measureShout = async () => {
-    const handleStart = () => {
-      if (role === "guest") return
-      const startAt = Date.now() + 1500
-      transport.sendMatchStart(startAt)
-      onStart(voiceRef.current, startAt)
-    }
     setCalib("shout")
     await voiceRef.current?.calibratePeak(1800)
     setCalib("done")

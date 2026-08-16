@@ -7,6 +7,7 @@ import { LocalAiTransport, SupabaseTransport, type Transport } from "./lib/net"
 import { isSupabaseConfigured } from "./lib/supabase"
 import { makeRoomCode, type Winner } from "./lib/game"
 import type { VoiceController } from "./lib/voice"
+import bgMusic from "./imports/Aadeda_Aattam_Nee_Video_Song___Vadam_Vali_Song___Aadu_2___Shaan_Rahman___Jayasurya___Vijay_Babu.mp3"
 
 type Scene = "landing" | "lobby" | "play" | "win"
 
@@ -100,6 +101,7 @@ export default function App() {
 
   return (
     <div className="h-full w-full">
+      <audio src={bgMusic} autoPlay loop />
       {scene === "landing" && (
         <Landing
           onHost={handleHost}
