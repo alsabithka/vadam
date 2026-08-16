@@ -169,8 +169,8 @@ export class LocalAiTransport implements Transport {
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
   }
-  onMatchStart(cb: (startAt: number) => void) {
-    this.matchStartCb = cb
+  onMatchStart(_cb: (startAt: number) => void) {
+    // No remote peer in practice mode; host calls onStart directly in Lobby.
   }
   onState() {
     /* no remote peer to inform */

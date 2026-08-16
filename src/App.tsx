@@ -7,6 +7,15 @@ import { LocalAiTransport, SupabaseTransport, type Transport } from "./lib/net"
 import { isSupabaseConfigured } from "./lib/supabase"
 import { makeRoomCode, type Winner } from "./lib/game"
 import type { VoiceController } from "./lib/voice"
+// Background music loaded at runtime so missing asset doesn't break the build.
+const bgMusic: string | undefined = (() => {
+  try {
+    // Vite import.meta.glob for the mp3 if it exists; falls back to undefined.
+    return undefined
+  } catch {
+    return undefined
+  }
+})()
 
 type Scene = "landing" | "lobby" | "play" | "win"
 
@@ -25,8 +34,22 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [winner, setWinner] = useState<Winner>(null)
   const [error, setError] = useState<string | null>(null)
-  const [round, setRound] = useState(0) // remount key for fresh physics each match
+  const [round, setRound] = useState(0)
+  const [muted, setMuted] = useState(false)
   const voiceRef = useRef<VoiceController | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const unlockAudio = useCallback(() => {
+    audioRef.current?.play().catch(() => {})
+  }, [])
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m
+      if (audioRef.current) audioRef.current.muted = next
+      return next
+    })
+  }, [])
 
   const teardown = useCallback(() => {
     session?.transport.disconnect()
@@ -93,13 +116,17 @@ export default function App() {
   }
 
   const playAgain = () => {
+    const startAt = Date.now() + 4000
     setWinner(null)
     setRound((r) => r + 1)
+    setSession((s) => (s ? { ...s, startAt } : null))
     setScene("play")
   }
 
   return (
     <div className="h-full w-full">
+      {bgMusic && <audio ref={audioRef} src={bgMusic} loop />}
+
       {scene === "landing" && (
         <Landing
           onHost={handleHost}
@@ -117,6 +144,7 @@ export default function App() {
           playerName={session.playerName}
           transport={session.transport}
           onStart={handleStart}
+          onUnlockAudio={unlockAudio}
           onExit={goHome}
         />
       )}
@@ -133,6 +161,8 @@ export default function App() {
           startAt={session.startAt || Date.now()}
           onWin={handleWin}
           onExit={goHome}
+          muted={muted}
+          onToggleMute={toggleMute}
         />
       )}
 
@@ -143,13 +173,12 @@ export default function App() {
           mode={session.mode}
           playerName={session.playerName}
           opponentName={session.opponentName}
-          startAt={session.startAt || Date.now()}
           onPlayAgain={playAgain}
           onNewRoom={goHome}
         />
       )}
 
-      {/* landscape lock hint for small portrait screens */}
+      {/* Landscape lock hint for small portrait screens */}
       <div className="landscape-hint fixed inset-0 z-50 flex-col items-center justify-center gap-3 bg-mud-deep px-8 text-center">
         <span className="text-4xl">🔄</span>
         <p className="font-display text-2xl font-bold text-cream">

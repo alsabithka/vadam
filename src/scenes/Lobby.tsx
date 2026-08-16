@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react"
+import Field from "../components/Field"
 import RoomCodeDisplay from "../components/RoomCodeDisplay"
 import { startMic, type VoiceController } from "../lib/voice"
 import type { Transport } from "../lib/net"
-import bgImage from "../imports/download.jpg"
 
 interface LobbyProps {
   mode: "online" | "local"
@@ -11,6 +11,7 @@ interface LobbyProps {
   playerName: string
   transport: Transport
   onStart: (voice: VoiceController | null, startAt: number) => void
+  onUnlockAudio: () => void
   onExit: () => void
 }
 
@@ -23,12 +24,11 @@ export default function Lobby({
   playerName,
   transport,
   onStart,
+  onUnlockAudio,
   onExit,
 }: LobbyProps) {
   const [peer, setPeer] = useState(mode === "local")
-  const [mic, setMic] = useState<"idle" | "granting" | "granted" | "denied">(
-    "idle",
-  )
+  const [mic, setMic] = useState<"idle" | "granting" | "granted" | "denied">("idle")
   const [calib, setCalib] = useState<Calib>("none")
   const [connError, setConnError] = useState<string | null>(null)
   const voiceRef = useRef<VoiceController | null>(null)
@@ -41,7 +41,10 @@ export default function Lobby({
     })
     transport
       .connect()
-      .catch((e) => setConnError(e?.message ?? "Connection failed"))
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : "Connection failed"
+        setConnError(msg)
+      })
   }, [transport])
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function Lobby({
   }, [mic])
 
   const enableMic = async () => {
+    onUnlockAudio()
     setMic("granting")
     try {
       voiceRef.current = await startMic()
@@ -69,13 +73,13 @@ export default function Lobby({
 
   const measureQuiet = async () => {
     setCalib("quiet")
-    await voiceRef.current?.calibrateNoiseFloor(1000)
+    await voiceRef.current?.calibrateNoiseFloor(1500)
     setCalib("quiet-done")
   }
 
   const measureShout = async () => {
     setCalib("shout")
-    await voiceRef.current?.calibratePeak(1800)
+    await voiceRef.current?.calibratePeak(2000)
     setCalib("done")
   }
 
@@ -88,40 +92,63 @@ export default function Lobby({
 
   const ready = peer && mic === "granted" && calib === "done"
 
+  const titleText =
+    mode === "local"
+      ? "Practice Match"
+      : role === "host"
+        ? "Waiting for challenger"
+        : "Joining match"
+
   return (
-    <div
-      className="relative flex min-h-full flex-col items-center justify-center px-6 py-10 bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: `url(${bgImage})` }}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative z-10 animate-rise flex w-full max-w-md flex-col items-center gap-6 text-center">
-        <button
-          onClick={onExit}
-          className="self-start font-body text-sm text-cream/80 hover:text-gold"
-        >
-          ← Leave
-        </button>
+    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden">
+      <Field />
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
 
-        <h2 className="font-display text-4xl font-extrabold text-cream">
-          {mode === "local"
-            ? "Practice Match"
-            : role === "host"
-              ? "Waiting for a challenger"
-              : "Joining match"}
-        </h2>
+      <div className="relative z-10 animate-rise flex w-full max-w-md flex-col items-center gap-5 px-6 py-10 text-center">
+        {/* Header */}
+        <div className="flex w-full items-center justify-between">
+          <button
+            onClick={onExit}
+            className="font-body text-sm text-cream/70 transition hover:text-gold"
+          >
+            {"← Leave"}
+          </button>
+          <span className="font-body text-xs uppercase tracking-widest text-gold/60">
+            {mode === "local" ? "Solo" : role === "host" ? "Host" : "Guest"}
+          </span>
+        </div>
 
+        <div className="flex flex-col items-center gap-1">
+          <h2
+            className="font-display text-4xl font-extrabold text-cream"
+            style={{ textShadow: "0 3px 0 #4a2915" }}
+          >
+            {titleText}
+          </h2>
+          <p className="font-body text-sm text-cream/60">
+            Hello, <span className="text-gold font-semibold">{playerName}</span>
+          </p>
+        </div>
+
+        {/* Room code for online host */}
         {mode === "online" && role === "host" && (
-          <RoomCodeDisplay code={roomCode} />
+          <div className="flex flex-col items-center gap-1">
+            <RoomCodeDisplay code={roomCode} />
+            <p className="font-body text-xs text-cream/50">
+              Share this code with your opponent
+            </p>
+          </div>
         )}
-        {mode === "online" && (
-          <p className="font-body text-sm text-cream/90">
-            {role === "host"
-              ? "Share this code with your opponent."
-              : `Connecting to room ${roomCode}…`}
+        {mode === "online" && role === "guest" && (
+          <p className="font-body text-sm text-cream/70">
+            Connecting to room{" "}
+            <span className="font-mono text-gold">{roomCode}</span>
+            {"…"}
           </p>
         )}
 
-        <div className="flex w-full flex-col gap-3">
+        {/* Status rows */}
+        <div className="flex w-full flex-col gap-2.5">
           <StatusRow
             ok={peer}
             label={
@@ -138,38 +165,45 @@ export default function Lobby({
               mic === "granted"
                 ? "Microphone ready"
                 : mic === "denied"
-                  ? "Microphone blocked"
+                  ? "Microphone blocked — check browser permissions"
                   : "Microphone needed to shout"
             }
             action={
-              mic !== "granted" ? (
+              mic !== "granted" && mic !== "denied" ? (
                 <button
                   onClick={enableMic}
-                  className="rounded-lg bg-gold px-3 py-1.5 font-display text-sm font-bold text-mud-deep"
+                  className="shrink-0 rounded-lg bg-gold px-3 py-1.5 font-display text-sm font-bold text-mud-deep transition hover:brightness-110 active:translate-y-0.5"
                 >
                   {mic === "granting" ? "…" : "Enable"}
                 </button>
+              ) : mic === "denied" ? (
+                <span className="font-body text-xs text-marigold">Blocked</span>
               ) : undefined
             }
           />
         </div>
 
+        {/* Calibration panel */}
         {mic === "granted" && (
-          <div className="flex w-full flex-col gap-3 rounded-2xl border border-gold/25 bg-black/40 p-4">
-            <p className="font-display text-lg font-bold text-cream">
-              Calibrate your mic
+          <div className="flex w-full flex-col gap-3.5 rounded-2xl border border-gold/20 bg-black/45 p-5">
+            <p className="font-display text-base font-bold text-cream">
+              Calibrate Microphone
             </p>
 
+            {/* Live level bar */}
             <div
-              className="h-3 w-full overflow-hidden rounded-full bg-black/50"
-              style={{ boxShadow: "inset 0 1px 3px rgba(0,0,0,.5)" }}
+              className="h-3 w-full overflow-hidden rounded-full"
+              style={{
+                background: "rgba(0,0,0,0.5)",
+                boxShadow: "inset 0 1px 3px rgba(0,0,0,.5)",
+              }}
             >
               <div
                 ref={meterRef}
-                className="h-full rounded-full"
+                className="h-full rounded-full transition-none"
                 style={{
                   width: "0%",
-                  background: "linear-gradient(90deg,#8ec3ef,#f4b528)",
+                  background: "linear-gradient(90deg, #8ec3ef, #f4b528, #ef7e1a)",
                 }}
               />
             </div>
@@ -179,7 +213,11 @@ export default function Lobby({
               label="Stay quiet"
               hint="Measures your room's background noise"
               state={
-                calib === "none" ? "ready" : calib === "quiet" ? "busy" : "done"
+                calib === "none"
+                  ? "ready"
+                  : calib === "quiet"
+                    ? "busy"
+                    : "done"
               }
               busyLabel="Listening…"
               onRun={measureQuiet}
@@ -188,7 +226,7 @@ export default function Lobby({
             <CalibStep
               index={2}
               label='Shout "Arpooo!"'
-              hint="Sets your loudest level"
+              hint="Sets your maximum loudness level"
               state={
                 calib === "done"
                   ? "done"
@@ -206,14 +244,17 @@ export default function Lobby({
         )}
 
         {connError && (
-          <p className="font-body text-sm text-marigold">{connError}</p>
+          <div className="w-full rounded-xl border border-marigold/30 bg-marigold/10 px-4 py-3">
+            <p className="font-body text-sm text-marigold">{connError}</p>
+          </div>
         )}
 
+        {/* Start / waiting button */}
         {role === "host" || mode === "local" ? (
           <button
             onClick={handleStart}
             disabled={!ready}
-            className="w-full rounded-xl bg-marigold px-6 py-4 font-display text-2xl font-extrabold text-cream shadow-[0_4px_0_#b45a10] transition active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-xl bg-marigold px-6 py-4 font-display text-2xl font-extrabold text-cream shadow-[0_5px_0_#a34f08] transition active:translate-y-0.5 active:shadow-[0_2px_0_#a34f08] disabled:cursor-not-allowed disabled:opacity-35 hover:brightness-105"
           >
             Start Tug!
           </button>
@@ -221,15 +262,15 @@ export default function Lobby({
           <div
             className={`w-full rounded-xl px-6 py-4 font-display text-2xl font-extrabold text-cream transition ${
               ready
-                ? "bg-marigold shadow-[0_4px_0_#b45a10] animate-pulse"
-                : "bg-black/20 border border-cream/15 text-cream/40"
+                ? "bg-marigold shadow-[0_5px_0_#a34f08] animate-pulse"
+                : "border border-cream/15 bg-black/20 text-cream/40"
             }`}
           >
-            {ready ? "Waiting for host..." : "Complete setup to join"}
+            {ready ? "Waiting for host…" : "Complete setup to join"}
           </div>
         )}
 
-        <p className="font-body text-xs text-cream/70">
+        <p className="font-body text-xs text-cream/40">
           Best played in landscape · turn up the volume
         </p>
       </div>
@@ -247,15 +288,13 @@ function StatusRow({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-cream/15 bg-black/40 px-4 py-3">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-cream/10 bg-black/40 px-4 py-3">
+      <div className="flex items-center gap-3 text-left">
         <span
-          className={`h-2.5 w-2.5 rounded-full ${
-            ok ? "bg-green-400" : "bg-cream/40"
-          }`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${ok ? "bg-green-400" : "bg-cream/30"}`}
           style={ok ? { boxShadow: "0 0 8px #4ade80" } : undefined}
         />
-        <span className="font-body text-sm text-cream/90">{label}</span>
+        <span className="font-body text-sm text-cream/85">{label}</span>
       </div>
       {action}
     </div>
@@ -281,8 +320,8 @@ function CalibStep({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${
-        state === "locked" ? "opacity-50" : ""
+      className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${
+        state === "locked" ? "opacity-40" : ""
       }`}
     >
       <div className="flex items-center gap-3 text-left">
@@ -297,7 +336,7 @@ function CalibStep({
         </span>
         <div>
           <p className="font-display text-sm font-bold text-cream">{label}</p>
-          <p className="font-body text-xs text-cream/70">{hint}</p>
+          <p className="font-body text-xs text-cream/60">{hint}</p>
         </div>
       </div>
       {state === "done" ? (
@@ -306,11 +345,11 @@ function CalibStep({
         <button
           onClick={onRun}
           disabled={disabled}
-          className={`rounded-lg px-3 py-1.5 font-display text-sm font-bold ${
+          className={`shrink-0 rounded-lg px-3 py-1.5 font-display text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
             state === "busy"
               ? "animate-pulse bg-marigold text-cream"
-              : "bg-gold text-mud-deep"
-          } disabled:cursor-not-allowed disabled:opacity-40`}
+              : "bg-gold text-mud-deep hover:brightness-105"
+          }`}
         >
           {state === "busy" ? busyLabel : "Measure"}
         </button>

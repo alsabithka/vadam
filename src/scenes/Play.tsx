@@ -25,7 +25,13 @@ interface PlayProps {
   startAt: number
   onWin: (winner: Winner) => void
   onExit: () => void
+  muted: boolean
+  onToggleMute: () => void
 }
+
+const HOST_X = 70
+const GUEST_X = 930
+const CHAR_Y = 260
 
 export default function Play({
   role,
@@ -37,6 +43,8 @@ export default function Play({
   startAt,
   onWin,
   onExit,
+  muted,
+  onToggleMute,
 }: PlayProps) {
   const [count, setCount] = useState(() =>
     Math.max(0, Math.ceil((startAt - Date.now()) / 1000)),
@@ -127,23 +135,9 @@ export default function Play({
           <CharacterDefs team="mustard" side="right" />
         </defs>
 
-        {/* 1. Back Legs */}
-        <CharacterBackLeg
-          team="blue"
-          side="left"
-          anim={hostAnim}
-          x={HOST_X}
-          y={CHAR_Y}
-        />
-        <CharacterBackLeg
-          team="mustard"
-          side="right"
-          anim={guestAnim}
-          x={GUEST_X}
-          y={CHAR_Y}
-        />
+        <CharacterBackLeg team="blue" side="left" anim={hostAnim} x={HOST_X} y={CHAR_Y} />
+        <CharacterBackLeg team="mustard" side="right" anim={guestAnim} x={GUEST_X} y={CHAR_Y} />
 
-        {/* 2. Rope (behind torso) */}
         <Rope
           pull={state.pull}
           iHost={anim.iHost}
@@ -152,71 +146,52 @@ export default function Play({
           rightHand={rightHand}
         />
 
-        {/* 3. Torso + Arms + Head */}
-        <CharacterTorso
-          team="blue"
-          side="left"
-          anim={hostAnim}
-          x={HOST_X}
-          y={CHAR_Y}
-        />
-        <CharacterTorso
-          team="mustard"
-          side="right"
-          anim={guestAnim}
-          x={GUEST_X}
-          y={CHAR_Y}
-        />
+        <CharacterTorso team="blue" side="left" anim={hostAnim} x={HOST_X} y={CHAR_Y} />
+        <CharacterTorso team="mustard" side="right" anim={guestAnim} x={GUEST_X} y={CHAR_Y} />
 
-        {/* 4. Front Legs + Feet */}
-        <CharacterFrontLeg
-          team="blue"
-          side="left"
-          anim={hostAnim}
-          x={HOST_X}
-          y={CHAR_Y}
-        />
-        <CharacterFrontLeg
-          team="mustard"
-          side="right"
-          anim={guestAnim}
-          x={GUEST_X}
-          y={CHAR_Y}
-        />
+        <CharacterFrontLeg team="blue" side="left" anim={hostAnim} x={HOST_X} y={CHAR_Y} />
+        <CharacterFrontLeg team="mustard" side="right" anim={guestAnim} x={GUEST_X} y={CHAR_Y} />
       </svg>
 
-      {/* meters + names */}
+      {/* Intensity meters + player names */}
       <div className="absolute inset-x-0 top-0 flex items-start justify-between px-[3vw] pt-[2.5vh]">
-        <IntensityMeter
-          intensity={anim.iHost}
-          team="blue"
-          align="left"
-          name={leftName}
-        />
-        <IntensityMeter
-          intensity={anim.iGuest}
-          team="mustard"
-          align="right"
-          name={rightName}
-        />
+        <IntensityMeter intensity={anim.iHost} team="blue" align="left" name={leftName} />
+        <IntensityMeter intensity={anim.iGuest} team="mustard" align="right" name={rightName} />
       </div>
 
-      <button
-        onClick={onExit}
-        className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-cream/25 bg-black/30 px-4 py-1 font-body text-xs text-cream/70 hover:text-gold"
-      >
-        Quit
-      </button>
+      {/* Controls */}
+      <div className="absolute left-1/2 top-3 -translate-x-1/2 flex items-center gap-3">
+        <button
+          onClick={onExit}
+          className="rounded-full border border-cream/25 bg-black/30 px-4 py-1.5 font-body text-xs text-cream/70 transition hover:text-gold hover:border-gold/40 backdrop-blur-sm"
+        >
+          Quit
+        </button>
+        <button
+          onClick={onToggleMute}
+          aria-label={muted ? "Unmute music" : "Mute music"}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-cream/20 bg-black/30 text-base text-cream backdrop-blur-sm transition hover:bg-black/50 active:translate-y-0.5"
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
+      </div>
 
-      {/* countdown overlay */}
+      {/* countdown overlay
+          display = min(count, 3) so both players always see 3→2→1 even if
+          one client mounts slightly late and starts at count=4. The `key`
+          on the displayed value ensures the pop-in animation only fires on
+          actual digit changes (4→3 is silent, 3→2→1 each animate). */}
       {count > 0 && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-sm">
           <span
-            key={count}
-            className="animate-rise font-display text-[22vw] font-extrabold leading-none text-gold"
-            style={{ textShadow: "0 4px 0 #6b3f22" }}
+            key={Math.min(count, 3)}
+            className="animate-rise font-display font-extrabold leading-none text-gold"
+            style={{
+              fontSize: "22vw",
+              textShadow: "0 6px 0 #6b3f22, 0 0 60px rgba(244,181,40,0.4)",
+            }}
           >
-            {count}
+            {Math.min(count, 3)}
           </span>
         </div>
       )}
@@ -226,22 +201,20 @@ export default function Play({
 
       {/* guest waiting for host physics to arrive */}
       {syncing && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur z-50">
-          <p className="font-display text-3xl font-bold text-cream">
-            Syncing...
-          </p>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gold/30 border-t-gold" />
+          <p className="font-display text-3xl font-bold text-cream">Syncing…</p>
+          <p className="font-body text-sm text-cream/60">Waiting for host to begin</p>
         </div>
       )}
 
-      {/* opponent disconnected */}
       {peerLeft && mode === "online" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur">
-          <p className="font-display text-3xl font-bold text-cream">
-            Opponent disconnected
-          </p>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 backdrop-blur">
+          <p className="font-display text-3xl font-bold text-cream">Opponent disconnected</p>
+          <p className="font-body text-sm text-cream/60">The match cannot continue</p>
           <button
             onClick={onExit}
-            className="rounded-xl bg-gold px-6 py-3 font-display text-lg font-bold text-mud-deep"
+            className="rounded-xl bg-gold px-8 py-3.5 font-display text-xl font-bold text-mud-deep shadow-[0_4px_0_#b47c10] transition active:translate-y-0.5"
           >
             Back to menu
           </button>
