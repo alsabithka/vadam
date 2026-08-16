@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Mukta:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Baloo 2', system-ui, sans-serif;
+  --font-body: 'Mukta', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+
+  /* Onam festival palette */
+  --color-mud: #6b3f22;
+  --color-mud-deep: #4a2915;
+  --color-clay: #9a5a30;
+  --color-paddy: #4b7a2b;
+  --color-paddy-deep: #2f5518;
+  --color-palm: #1c3d16;
+  --color-gold: #f4b528;
+  --color-marigold: #ef7e1a;
+  --color-blue-team: #2f6fb0;
+  --color-mustard-team: #d99a1c;
+  --color-cream: #fbf3d9;
+  --color-dusk: #f0a54e;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: #241207;
+  color: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Hide scrollbars until scrolling */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+::selection {
+  background: var(--color-gold);
+  color: var(--color-mud-deep);
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(var(--sway-from, -2deg));
+  }
+  50% {
+    transform: rotate(var(--sway-to, 2deg));
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* --- Continuous backward-stepping leg cycle (never idle) --- */
+@keyframes leg-back {
+  0% {
+    transform: rotate(-16deg) translateY(0);
+  }
+  25% {
+    transform: rotate(-3deg) translateY(-7px);
+  } /* lift heel */
+  50% {
+    transform: rotate(12deg) translateY(0);
+  } /* dig in behind */
+  75% {
+    transform: rotate(-1deg) translateY(-4px);
+  }
+  100% {
+    transform: rotate(-16deg) translateY(0);
+  }
+}
+
+@keyframes torso-strain {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-2.5deg);
+  }
+}
+
+@keyframes heel-dig {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-14deg);
+  }
+}
+
+@keyframes leaf-sway {
+  0%,
+  100% {
+    transform: rotate(var(--sway-from, -2deg));
+  }
+  50% {
+    transform: rotate(var(--sway-to, 3deg));
+  }
+}
+
+.landscape-hint {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 900px) {
+  .landscape-hint {
+    display: flex;
+  }
+}
+
+@keyframes puddle-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
