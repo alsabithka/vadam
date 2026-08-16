@@ -5,8 +5,8 @@ interface RopeProps {
   pull: number // -1 (left wins) .. +1 (right wins)
   iHost: number // left player's live (smoothed) intensity 0..1
   iGuest: number // right player's live (smoothed) intensity 0..1
-  leftHand: { x: MotionValue<number>; y: MotionValue<number> }
-  rightHand: { x: MotionValue<number>; y: MotionValue<number> }
+  leftHand: { x: MotionValue<number> y: MotionValue<number> }
+  rightHand: { x: MotionValue<number> y: MotionValue<number> }
 }
 
 const IDLE_AMP = 3 // rope is never fully static

@@ -116,7 +116,7 @@ export function useCharacterAnim({
     return () => cancelAnimationFrame(raf)
   }, [straining, phaseOffset, legBack, legFront, liftBack, liftFront, breath])
 
-  const [dust, setDust] = useState<{ id: number; x: number }[]>([])
+  const [dust, setDust] = useState<{ id: number x: number }[]>([])
   useEffect(() => {
     if (spike === 0) return
     const id = spike + Math.random()

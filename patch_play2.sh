@@ -1,0 +1,48 @@
+cat << 'INNEREOF' > tmp_play2.patch
+@@ -38,15 +38,20 @@
+   onWin,
+   onExit,
+ }: PlayProps) {
+-  const [count, setCount] = useState(3)
+-  const active = count === 0
+-  const { state, anim, peerLeft } = useTugGame({
+-    role,
+-    transport,
+-    voice,
+-    active,
+-  })
++  const [count, setCount] = useState(() => Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+ 
+-  useEffect(() => {
+-    if (count === 0) return
+-    const t = setTimeout(() => setCount((c) => c - 1), 750)
+-    return () => clearTimeout(t)
+-  }, [count])
++  useEffect(() => {
++    if (count <= 0) return
++    let raf = 0
++    const tick = () => {
++      const left = Math.ceil((startAt - Date.now()) / 1000)
++      if (left <= 0) setCount(0)
++      else {
++        setCount(left)
++        raf = requestAnimationFrame(tick)
++      }
++    }
++    raf = requestAnimationFrame(tick)
++    return () => cancelAnimationFrame(raf)
++  }, [startAt, count])
++
++  const isStartPayload = state?.status === "playing" && state?.pull === 0;
++  const peerConnected = mode === "local" || !peerLeft;
++  const syncing = count === 0 && mode === "online" && role === "guest" && isStartPayload;
++  const active = count === 0 && !syncing && peerConnected;
++
++  const { state, anim, peerLeft } = useTugGame({
++    role,
++    transport,
++    voice,
++    active,
++  })
+INNEREOF
+patch src/scenes/Play.tsx tmp_play2.patch
