@@ -34,23 +34,31 @@ export default function Play({
   voice,
   playerName,
   opponentName,
+  startAt,
   onWin,
   onExit,
 }: PlayProps) {
-  const [count, setCount] = useState(3)
+  const [count, setCount] = useState(() =>
+    Math.max(0, Math.ceil((startAt - Date.now()) / 1000)),
+  )
   const active = count === 0
-  const { state, anim, peerLeft } = useTugGame({
+  const { state, anim, peerConnected, peerLeft } = useTugGame({
     role,
     transport,
     voice,
     active,
   })
 
+  const syncing =
+    mode === "online" && !peerConnected && role === "guest" && !active
+
   useEffect(() => {
     if (count === 0) return
-    const t = setTimeout(() => setCount((c) => c - 1), 750)
-    return () => clearTimeout(t)
-  }, [count])
+    const t = setInterval(() => {
+      setCount(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+    }, 100)
+    return () => clearInterval(t)
+  }, [count, startAt])
 
   useEffect(() => {
     if (state.status === "over" && state.winner) {

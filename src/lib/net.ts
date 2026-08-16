@@ -31,7 +31,7 @@ export interface Transport {
 export class SupabaseTransport implements Transport {
   readonly kind = "supabase" as const
   private channel: RealtimeChannel | null = null
-  private handlers: Record<string, () => void[]> = {}
+  private handlers: Record<string, (() => void)[]> = {}
   private intensityCb: ((v: number) => void) | null = null
   private stateCb: ((s: StatePayload) => void) | null = null
   private matchStartCb: ((startAt: number) => void) | null = null

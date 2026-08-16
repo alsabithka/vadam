@@ -7,6 +7,7 @@ interface WinProps {
   mode: "online" | "local"
   playerName: string
   opponentName: string
+  startAt?: number
   onPlayAgain: () => void
   onNewRoom: () => void
 }

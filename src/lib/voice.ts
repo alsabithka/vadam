@@ -17,7 +17,7 @@ export interface VoiceController {
   calibrateNoiseFloor: (ms?: number) => Promise<number>
   /** Measure the loudest reading over `ms` (user shouts) and store it as peak. */
   calibratePeak: (ms?: number) => Promise<number>
-  getCalibration: () => { noiseFloor: number userPeak: number }
+  getCalibration: () => { noiseFloor: number; userPeak: number }
   stop: () => void
 }
 
