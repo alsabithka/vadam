@@ -28,6 +28,21 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [round, setRound] = useState(0) // remount key for fresh physics each match
   const voiceRef = useRef<VoiceController | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [muted, setMuted] = useState(false)
+
+  // Kick off music on the first real user interaction (browser autoplay policy).
+  const unlockAudio = useCallback(() => {
+    audioRef.current?.play().catch(() => {})
+  }, [])
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m
+      if (audioRef.current) audioRef.current.muted = next
+      return next
+    })
+  }, [])
 
   const teardown = useCallback(() => {
     session?.transport.disconnect()
@@ -101,7 +116,7 @@ export default function App() {
 
   return (
     <div className="h-full w-full">
-      <audio src={bgMusic} autoPlay loop />
+      <audio ref={audioRef} src={bgMusic} loop />
       {scene === "landing" && (
         <Landing
           onHost={handleHost}
@@ -119,6 +134,7 @@ export default function App() {
           playerName={session.playerName}
           transport={session.transport}
           onStart={handleStart}
+          onUnlockAudio={unlockAudio}
           onExit={goHome}
         />
       )}
@@ -149,6 +165,16 @@ export default function App() {
           onPlayAgain={playAgain}
           onNewRoom={goHome}
         />
+      )}
+
+      {scene === "play" && (
+        <button
+          onClick={toggleMute}
+          aria-label={muted ? "Unmute music" : "Mute music"}
+          className="fixed right-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-cream/20 bg-black/50 text-xl text-cream backdrop-blur-sm transition hover:bg-black/70 active:translate-y-0.5"
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
       )}
 
       {/* landscape lock hint for small portrait screens */}

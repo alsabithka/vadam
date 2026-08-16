@@ -11,6 +11,7 @@ interface LobbyProps {
   playerName: string
   transport: Transport
   onStart: (voice: VoiceController | null, startAt: number) => void
+  onUnlockAudio: () => void
   onExit: () => void
 }
 
@@ -23,6 +24,7 @@ export default function Lobby({
   playerName,
   transport,
   onStart,
+  onUnlockAudio,
   onExit,
 }: LobbyProps) {
   const [peer, setPeer] = useState(mode === "local")
@@ -59,6 +61,7 @@ export default function Lobby({
   }, [mic])
 
   const enableMic = async () => {
+    onUnlockAudio() // first real user click — valid moment to start music per autoplay policy
     setMic("granting")
     try {
       voiceRef.current = await startMic()
