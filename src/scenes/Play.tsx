@@ -13,7 +13,7 @@ import { useTugGame } from "../lib/useTugGame"
 import type { Transport } from "../lib/net"
 import type { VoiceController } from "../lib/voice"
 import type { Winner } from "../lib/game"
-import { useTransform, MotionValue } from "framer-motion"
+import { useTransform } from "framer-motion"
 
 interface PlayProps {
   role: "host" | "guest"
@@ -34,23 +34,33 @@ export default function Play({
   voice,
   playerName,
   opponentName,
+  startAt,
   onWin,
   onExit,
 }: PlayProps) {
-  const [count, setCount] = useState(3)
+  const [count, setCount] = useState(() =>
+    Math.max(0, Math.ceil((startAt - Date.now()) / 1000)),
+  )
   const active = count === 0
-  const { state, anim, peerLeft } = useTugGame({
+  const { state, anim, peerConnected, peerLeft } = useTugGame({
     role,
     transport,
     voice,
     active,
   })
 
+  const syncing =
+    mode === "online" && !peerConnected && role === "guest" && !active
+
+  // Single stable interval — no recreation on every tick avoids missing the 0 transition.
   useEffect(() => {
     if (count === 0) return
-    const t = setTimeout(() => setCount((c) => c - 1), 750)
-    return () => clearTimeout(t)
-  }, [count])
+    const t = setInterval(() => {
+      setCount(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
+    }, 50)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startAt])
 
   useEffect(() => {
     if (state.status === "over" && state.winner) {
@@ -62,9 +72,6 @@ export default function Play({
   const leftName = role === "host" ? playerName : opponentName
   const rightName = role === "host" ? opponentName : playerName
 
-  // Shared coordinate system setup for characters and rope
-  // We place the left character at x=70, and right character at x=930.
-  // Their height is 340, so at y=260 they touch the bottom of the 600 viewBox.
   const HOST_X = 70
   const GUEST_X = 930
   const CHAR_Y = 260
@@ -88,20 +95,21 @@ export default function Play({
     phaseOffset: 1.9,
   })
 
-  const leftHand = useMemo(
-    () => ({
-      x: useTransform(hostAnim.localHandX, (x) => HOST_X + x),
-      y: useTransform(hostAnim.localHandY, (y) => CHAR_Y + y),
-    }),
-    [hostAnim.localHandX, hostAnim.localHandY],
-  )
+  // useTransform must be called unconditionally at the top level — never inside
+  // useMemo or any conditional. Putting them here ensures the hook count is
+  // stable across every render.
+  const leftHandX = useTransform(hostAnim.localHandX, (x) => HOST_X + x)
+  const leftHandY = useTransform(hostAnim.localHandY, (y) => CHAR_Y + y)
+  const rightHandX = useTransform(guestAnim.localHandX, (x) => GUEST_X - x)
+  const rightHandY = useTransform(guestAnim.localHandY, (y) => CHAR_Y + y)
 
+  const leftHand = useMemo(
+    () => ({ x: leftHandX, y: leftHandY }),
+    [leftHandX, leftHandY],
+  )
   const rightHand = useMemo(
-    () => ({
-      x: useTransform(guestAnim.localHandX, (x) => GUEST_X - x),
-      y: useTransform(guestAnim.localHandY, (y) => CHAR_Y + y),
-    }),
-    [guestAnim.localHandX, guestAnim.localHandY],
+    () => ({ x: rightHandX, y: rightHandY }),
+    [rightHandX, rightHandY],
   )
 
   return (
@@ -200,7 +208,7 @@ export default function Play({
         Quit
       </button>
 
-      {/* countdown */}
+      {/* countdown overlay */}
       {count > 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <span
@@ -212,7 +220,11 @@ export default function Play({
           </span>
         </div>
       )}
-      {active && count === 0 && <Flash />}
+
+      {/* "GO!" flash when the war begins */}
+      {active && <Flash />}
+
+      {/* guest waiting for host physics to arrive */}
       {syncing && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur z-50">
           <p className="font-display text-3xl font-bold text-cream">
@@ -242,17 +254,17 @@ export default function Play({
 function Flash() {
   const [show, setShow] = useState(true)
   useEffect(() => {
-    const t = setTimeout(() => setShow(false), 900)
+    const t = setTimeout(() => setShow(false), 1200)
     return () => clearTimeout(t)
   }, [])
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <span
-        className="animate-rise font-display text-[10vw] font-extrabold text-cream"
-        style={{ textShadow: "0 3px 0 #ef7e1a, 0 0 30px rgba(0,0,0,.6)" }}
+        className="animate-rise font-display text-[14vw] font-extrabold leading-none text-gold"
+        style={{ textShadow: "0 4px 0 #6b3f22, 0 0 40px rgba(244,181,40,0.6)" }}
       >
-        ആർപ്പോ!
+        GO!
       </span>
     </div>
   )

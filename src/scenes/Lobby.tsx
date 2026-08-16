@@ -33,7 +33,6 @@ export default function Lobby({
   const [connError, setConnError] = useState<string | null>(null)
   const voiceRef = useRef<VoiceController | null>(null)
   const meterRef = useRef<HTMLDivElement | null>(null)
-  const [waitingForHost, setWaitingForHost] = useState(false)
 
   useEffect(() => {
     transport.on("peer-join", () => setPeer(true))
@@ -73,16 +72,18 @@ export default function Lobby({
     await voiceRef.current?.calibrateNoiseFloor(1000)
     setCalib("quiet-done")
   }
+
   const measureShout = async () => {
-    const handleStart = () => {
-      if (role === "guest") return
-      const startAt = Date.now() + 1500
-      transport.sendMatchStart(startAt)
-      onStart(voiceRef.current, startAt)
-    }
     setCalib("shout")
     await voiceRef.current?.calibratePeak(1800)
     setCalib("done")
+  }
+
+  const handleStart = () => {
+    if (role === "guest") return
+    const startAt = Date.now() + 4000
+    transport.sendMatchStart(startAt)
+    onStart(voiceRef.current, startAt)
   }
 
   const ready = peer && mic === "granted" && calib === "done"

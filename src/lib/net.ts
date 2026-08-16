@@ -31,11 +31,12 @@ export interface Transport {
 export class SupabaseTransport implements Transport {
   readonly kind = "supabase" as const
   private channel: RealtimeChannel | null = null
-  private handlers: Record<string, () => void[]> = {}
+  private handlers: Record<string, (() => void)[]> = {}
   private intensityCb: ((v: number) => void) | null = null
   private stateCb: ((s: StatePayload) => void) | null = null
   private matchStartCb: ((startAt: number) => void) | null = null
   private peers = 0
+  private peerPresent = false
 
   constructor(
     private roomCode: string,
@@ -81,11 +82,16 @@ export class SupabaseTransport implements Transport {
   }
 
   private emit(ev: "peer-join" | "peer-leave") {
+    if (ev === "peer-join") this.peerPresent = true
+    if (ev === "peer-leave") this.peerPresent = false
     this.handlers[ev]?.forEach((cb) => cb())
   }
 
   on(ev: "peer-join" | "peer-leave", cb: () => void) {
     ;(this.handlers[ev] ||= []).push(cb)
+    // Fire immediately if peer already joined before this listener subscribed
+    // (e.g. Play scene mounts after Lobby already received peer-join).
+    if (ev === "peer-join" && this.peerPresent) cb()
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
@@ -128,12 +134,16 @@ export class LocalAiTransport implements Transport {
   private timer: ReturnType<typeof setInterval> | null = null
   private t = 0
   private surge = 0
+  private peerJoined = false
 
   constructor(private difficulty = 0.55) {}
 
   async connect() {
-    // Peer is "already there".
-    setTimeout(() => this.peerJoin?.(), 300)
+    // Peer is "already there" — fire after a short delay so listeners have time to register.
+    setTimeout(() => {
+      this.peerJoined = true
+      this.peerJoin?.()
+    }, 300)
     this.timer = setInterval(() => {
       this.t += 0.12
       if (Math.random() < 0.04) this.surge = 0.6 + Math.random() * 0.4
@@ -148,8 +158,13 @@ export class LocalAiTransport implements Transport {
 
   private peerJoin: (() => void) | null = null
   private matchStartCb: ((startAt: number) => void) | null = null
+
   on(ev: "peer-join" | "peer-leave", cb: () => void) {
-    if (ev === "peer-join") this.peerJoin = cb
+    if (ev === "peer-join") {
+      this.peerJoin = cb
+      // Fire immediately if peer already joined before this listener subscribed.
+      if (this.peerJoined) cb()
+    }
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
@@ -161,8 +176,9 @@ export class LocalAiTransport implements Transport {
     /* no remote peer to inform */
   }
   sendIntensity() {}
-  sendMatchStart(startAt: number) {
-    this.matchStartCb?.(startAt)
+  sendMatchStart(_startAt: number) {
+    // Local AI has no remote peer; the host calls onStart directly in Lobby.
+    // Do NOT call matchStartCb here — that would double-fire onStart.
   }
   sendState() {}
   disconnect() {
