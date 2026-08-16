@@ -8,18 +8,21 @@ import type { StatePayload } from "./game"
 import { openRoomChannel } from "./supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 
-export type TransportEvent = "peer-join" | "peer-leave" | "intensity" | "state" | "match-start"
 export type Role = "host" | "guest"
 
 export interface Transport {
   readonly kind: "supabase" | "local"
   connect: () => Promise<void>
-  /** guest -> host */
+  /** guest -> host: mic calibration complete, ready to play */
+  sendReady: () => void
+  /** guest -> host: live intensity */
   sendIntensity: (v: number) => void
-  /** host -> guest */
+  /** host -> guest: physics state */
   sendState: (s: StatePayload) => void
+  /** host -> both: absolute match-start timestamp */
   sendMatchStart: (startAt: number) => void
   on: (ev: "peer-join" | "peer-leave", cb: () => void) => void
+  onReady: (cb: () => void) => void
   onIntensity: (cb: (v: number) => void) => void
   onState: (cb: (s: StatePayload) => void) => void
   onMatchStart: (cb: (startAt: number) => void) => void
@@ -32,6 +35,7 @@ export class SupabaseTransport implements Transport {
   readonly kind = "supabase" as const
   private channel: RealtimeChannel | null = null
   private handlers: Record<string, (() => void)[]> = {}
+  private readyCb: (() => void) | null = null
   private intensityCb: ((v: number) => void) | null = null
   private stateCb: ((s: StatePayload) => void) | null = null
   private matchStartCb: ((startAt: number) => void) | null = null
@@ -48,6 +52,9 @@ export class SupabaseTransport implements Transport {
     if (!channel) throw new Error("Supabase is not connected")
     this.channel = channel
 
+    channel.on("broadcast", { event: "ready" }, () => {
+      this.readyCb?.()
+    })
     channel.on("broadcast", { event: "intensity" }, ({ payload }) => {
       this.intensityCb?.(payload.v as number)
     })
@@ -70,7 +77,6 @@ export class SupabaseTransport implements Transport {
       channel.subscribe((status) => {
         if (status === "SUBSCRIBED") {
           channel.track({ role: this.role, at: Date.now() })
-          // If a peer is already present (guest joined an occupied room).
           this.peers = Object.keys(channel.presenceState()).length
           if (this.peers > 1) this.emit("peer-join")
           resolve()
@@ -89,9 +95,10 @@ export class SupabaseTransport implements Transport {
 
   on(ev: "peer-join" | "peer-leave", cb: () => void) {
     ;(this.handlers[ev] ||= []).push(cb)
-    // Fire immediately if peer already joined before this listener subscribed
-    // (e.g. Play scene mounts after Lobby already received peer-join).
     if (ev === "peer-join" && this.peerPresent) cb()
+  }
+  onReady(cb: () => void) {
+    this.readyCb = cb
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
@@ -102,12 +109,11 @@ export class SupabaseTransport implements Transport {
   onState(cb: (s: StatePayload) => void) {
     this.stateCb = cb
   }
+  sendReady() {
+    this.channel?.send({ type: "broadcast", event: "ready", payload: {} })
+  }
   sendIntensity(v: number) {
-    this.channel?.send({
-      type: "broadcast",
-      event: "intensity",
-      payload: { v },
-    })
+    this.channel?.send({ type: "broadcast", event: "intensity", payload: { v } })
   }
   sendMatchStart(startAt: number) {
     this.channel?.send({
@@ -131,6 +137,7 @@ export class SupabaseTransport implements Transport {
 export class LocalAiTransport implements Transport {
   readonly kind = "local" as const
   private intensityCb: ((v: number) => void) | null = null
+  private readyCb: (() => void) | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private t = 0
   private surge = 0
@@ -139,11 +146,12 @@ export class LocalAiTransport implements Transport {
   constructor(private difficulty = 0.55) {}
 
   async connect() {
-    // Peer is "already there" — fire after a short delay so listeners have time to register.
+    // AI peer joins and immediately signals ready after a short delay.
     setTimeout(() => {
       this.peerJoined = true
       this.peerJoin?.()
-    }, 300)
+      this.readyCb?.()
+    }, 400)
     this.timer = setInterval(() => {
       this.t += 0.12
       if (Math.random() < 0.04) this.surge = 0.6 + Math.random() * 0.4
@@ -162,24 +170,24 @@ export class LocalAiTransport implements Transport {
   on(ev: "peer-join" | "peer-leave", cb: () => void) {
     if (ev === "peer-join") {
       this.peerJoin = cb
-      // Fire immediately if peer already joined before this listener subscribed.
       if (this.peerJoined) cb()
     }
+  }
+  onReady(cb: () => void) {
+    this.readyCb = cb
+    // If AI already signalled ready before the listener registered, fire now.
+    if (this.peerJoined) cb()
   }
   onIntensity(cb: (v: number) => void) {
     this.intensityCb = cb
   }
   onMatchStart(_cb: (startAt: number) => void) {
-    // No remote peer in practice mode; host calls onStart directly in Lobby.
+    // No remote peer in practice mode; host calls onStart directly.
   }
-  onState() {
-    /* no remote peer to inform */
-  }
+  onState() {}
+  sendReady() {}      // guest action; no-op for host-only local mode
   sendIntensity() {}
-  sendMatchStart(_startAt: number) {
-    // Local AI has no remote peer; the host calls onStart directly in Lobby.
-    // Do NOT call matchStartCb here — that would double-fire onStart.
-  }
+  sendMatchStart(_startAt: number) {}
   sendState() {}
   disconnect() {
     if (this.timer) clearInterval(this.timer)

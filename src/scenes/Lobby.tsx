@@ -31,14 +31,17 @@ export default function Lobby({
   const [mic, setMic] = useState<"idle" | "granting" | "granted" | "denied">("idle")
   const [calib, setCalib] = useState<Calib>("none")
   const [connError, setConnError] = useState<string | null>(null)
+  // Host tracks whether the guest clicked "Ready"
+  const [guestReady, setGuestReady] = useState(mode === "local")
+  // Guest tracks whether they've sent their ready signal
+  const [selfReady, setSelfReady] = useState(false)
   const voiceRef = useRef<VoiceController | null>(null)
   const meterRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     transport.on("peer-join", () => setPeer(true))
-    transport.onMatchStart((startAt) => {
-      onStart(voiceRef.current, startAt)
-    })
+    transport.onReady(() => setGuestReady(true))
+    transport.onMatchStart((startAt) => onStart(voiceRef.current, startAt))
     transport
       .connect()
       .catch((e: unknown) => {
@@ -47,6 +50,7 @@ export default function Lobby({
       })
   }, [transport])
 
+  // Live mic-level meter animation
   useEffect(() => {
     if (mic !== "granted") return
     let raf = 0
@@ -83,14 +87,20 @@ export default function Lobby({
     setCalib("done")
   }
 
+  // True when this player has completed all mic setup
+  const ownReady = peer && mic === "granted" && calib === "done"
+
+  const handleReady = () => {
+    transport.sendReady()
+    setSelfReady(true)
+  }
+
   const handleStart = () => {
     if (role === "guest") return
     const startAt = Date.now() + 5000
     transport.sendMatchStart(startAt)
     onStart(voiceRef.current, startAt)
   }
-
-  const ready = peer && mic === "granted" && calib === "done"
 
   const titleText =
     mode === "local"
@@ -126,11 +136,11 @@ export default function Lobby({
             {titleText}
           </h2>
           <p className="font-body text-sm text-cream/60">
-            Hello, <span className="text-gold font-semibold">{playerName}</span>
+            Hello, <span className="font-semibold text-gold">{playerName}</span>
           </p>
         </div>
 
-        {/* Room code for online host */}
+        {/* Room code (online host only) */}
         {mode === "online" && role === "host" && (
           <div className="flex flex-col items-center gap-1">
             <RoomCodeDisplay code={roomCode} />
@@ -147,7 +157,7 @@ export default function Lobby({
           </p>
         )}
 
-        {/* Status rows */}
+        {/* Connection + mic status */}
         <div className="flex w-full flex-col gap-2.5">
           <StatusRow
             ok={peer}
@@ -181,22 +191,26 @@ export default function Lobby({
               ) : undefined
             }
           />
+
+          {/* Host sees whether the opponent is ready */}
+          {mode === "online" && role === "host" && peer && (
+            <StatusRow
+              ok={guestReady}
+              label={guestReady ? "Opponent is ready!" : "Waiting for opponent to ready up…"}
+            />
+          )}
         </div>
 
-        {/* Calibration panel */}
+        {/* Mic calibration panel */}
         {mic === "granted" && (
           <div className="flex w-full flex-col gap-3.5 rounded-2xl border border-gold/20 bg-black/45 p-5">
             <p className="font-display text-base font-bold text-cream">
               Calibrate Microphone
             </p>
 
-            {/* Live level bar */}
             <div
               className="h-3 w-full overflow-hidden rounded-full"
-              style={{
-                background: "rgba(0,0,0,0.5)",
-                boxShadow: "inset 0 1px 3px rgba(0,0,0,.5)",
-              }}
+              style={{ background: "rgba(0,0,0,0.5)", boxShadow: "inset 0 1px 3px rgba(0,0,0,.5)" }}
             >
               <div
                 ref={meterRef}
@@ -212,13 +226,7 @@ export default function Lobby({
               index={1}
               label="Stay quiet"
               hint="Measures your room's background noise"
-              state={
-                calib === "none"
-                  ? "ready"
-                  : calib === "quiet"
-                    ? "busy"
-                    : "done"
-              }
+              state={calib === "none" ? "ready" : calib === "quiet" ? "busy" : "done"}
               busyLabel="Listening…"
               onRun={measureQuiet}
               disabled={calib === "quiet" || calib === "shout"}
@@ -249,25 +257,54 @@ export default function Lobby({
           </div>
         )}
 
-        {/* Start / waiting button */}
-        {role === "host" || mode === "local" ? (
+        {/* ── Action area ─────────────────────────────────────────────────── */}
+
+        {/* HOST (online): Start is only enabled once the guest is ready */}
+        {mode === "online" && role === "host" && (
           <button
             onClick={handleStart}
-            disabled={!ready}
+            disabled={!ownReady || !guestReady}
+            className="w-full rounded-xl bg-marigold px-6 py-4 font-display text-2xl font-extrabold text-cream shadow-[0_5px_0_#a34f08] transition active:translate-y-0.5 active:shadow-[0_2px_0_#a34f08] disabled:cursor-not-allowed disabled:opacity-35 hover:brightness-105"
+          >
+            {!ownReady
+              ? "Complete your setup first"
+              : !guestReady
+                ? "Waiting for opponent…"
+                : "Start Tug!"}
+          </button>
+        )}
+
+        {/* GUEST (online): Ready button, then waiting pill */}
+        {mode === "online" && role === "guest" && (
+          selfReady ? (
+            <div className="w-full rounded-xl border border-green-400/30 bg-green-400/10 px-6 py-4 text-center">
+              <p className="font-display text-xl font-bold text-green-400">
+                You are ready!
+              </p>
+              <p className="mt-1 font-body text-sm text-cream/50">
+                Waiting for the host to start the match…
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={handleReady}
+              disabled={!ownReady}
+              className="w-full rounded-xl bg-gold px-6 py-4 font-display text-2xl font-extrabold text-mud-deep shadow-[0_5px_0_#b47c10] transition active:translate-y-0.5 active:shadow-[0_2px_0_#b47c10] disabled:cursor-not-allowed disabled:opacity-35 hover:brightness-105"
+            >
+              {ownReady ? "I'm Ready!" : "Complete setup first"}
+            </button>
+          )
+        )}
+
+        {/* PRACTICE (local): Host starts immediately, AI auto-readies */}
+        {mode === "local" && (
+          <button
+            onClick={handleStart}
+            disabled={!ownReady}
             className="w-full rounded-xl bg-marigold px-6 py-4 font-display text-2xl font-extrabold text-cream shadow-[0_5px_0_#a34f08] transition active:translate-y-0.5 active:shadow-[0_2px_0_#a34f08] disabled:cursor-not-allowed disabled:opacity-35 hover:brightness-105"
           >
             Start Tug!
           </button>
-        ) : (
-          <div
-            className={`w-full rounded-xl px-6 py-4 font-display text-2xl font-extrabold text-cream transition ${
-              ready
-                ? "bg-marigold shadow-[0_5px_0_#a34f08] animate-pulse"
-                : "border border-cream/15 bg-black/20 text-cream/40"
-            }`}
-          >
-            {ready ? "Waiting for host…" : "Complete setup to join"}
-          </div>
         )}
 
         <p className="font-body text-xs text-cream/40">
@@ -327,9 +364,7 @@ function CalibStep({
       <div className="flex items-center gap-3 text-left">
         <span
           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${
-            state === "done"
-              ? "bg-green-400 text-mud-deep"
-              : "bg-cream/15 text-cream"
+            state === "done" ? "bg-green-400 text-mud-deep" : "bg-cream/15 text-cream"
           }`}
         >
           {state === "done" ? "✓" : index}
