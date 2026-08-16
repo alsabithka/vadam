@@ -1,4 +1,5 @@
 {
+  "title": "vadamvali thinker",
   "description": "Automates task management by reading instructions and executing actions to streamline workflows and boost productivity for users.",
   "robots": {
     "index": false

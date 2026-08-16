@@ -22,7 +22,7 @@ interface PlayProps {
 export default function Play({ role, mode, transport, voice, playerName, opponentName, onWin, onExit }: PlayProps) {
   const [count, setCount] = useState(3)
   const active = count === 0
-  const { state, peerLeft } = useTugGame({ role, transport, voice, active })
+  const { state, anim, peerLeft } = useTugGame({ role, transport, voice, active })
 
   // Countdown before the pull begins.
   useEffect(() => {
@@ -49,19 +49,19 @@ export default function Play({ role, mode, transport, voice, playerName, opponen
 
       {/* rope layer, inset so its anchors meet the characters' hands */}
       <div className="absolute" style={{ left: '9%', right: '9%', top: '40%', height: '30%' }}>
-        <Rope pull={state.pull} iHost={state.iHost} iGuest={state.iGuest} />
+        <Rope pull={state.pull} iHost={anim.iHost} iGuest={anim.iGuest} />
       </div>
 
       {/* characters */}
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-[2vw]" style={{ height: '78%' }}>
-        <Character side="left" team="blue" intensity={state.iHost} straining={active} />
-        <Character side="right" team="mustard" intensity={state.iGuest} straining={active} />
+        <Character side="left" team="blue" intensity={anim.iHost} spike={anim.spikeHost} pullVel={anim.pullVel} straining={active} phaseOffset={0} />
+        <Character side="right" team="mustard" intensity={anim.iGuest} spike={anim.spikeGuest} pullVel={anim.pullVel} straining={active} phaseOffset={1.9} />
       </div>
 
       {/* meters + names */}
       <div className="absolute inset-x-0 top-0 flex items-start justify-between px-[3vw] pt-[2.5vh]">
-        <IntensityMeter intensity={state.iHost} team="blue" align="left" name={leftName} />
-        <IntensityMeter intensity={state.iGuest} team="mustard" align="right" name={rightName} />
+        <IntensityMeter intensity={anim.iHost} team="blue" align="left" name={leftName} />
+        <IntensityMeter intensity={anim.iGuest} team="mustard" align="right" name={rightName} />
       </div>
 
       <button

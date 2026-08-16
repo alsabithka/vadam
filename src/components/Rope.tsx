@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react'
 
 interface RopeProps {
   pull: number // -1 (left wins) .. +1 (right wins)
-  iHost: number // left player's live intensity 0..1
-  iGuest: number // right player's live intensity 0..1
+  iHost: number // left player's live (smoothed) intensity 0..1
+  iGuest: number // right player's live (smoothed) intensity 0..1
 }
 
 const W = 1000
@@ -12,15 +12,17 @@ const LEFT = 70
 const RIGHT = 930
 const BASE_Y = 110
 const IDLE_AMP = 3 // rope is never fully static
-const MAX_AMP = 30
+const MAX_AMP = 26
 const CENTER_SHIFT = 210 // px the midpoint travels toward the winning side
 
-// Continuous jute rope drawn with a travelling wave. Amplitude ramps from the
-// side of whichever player is shouting; the central knot slides with the pull
-// balance and marks the win threshold.
+// Continuous jute rope. The centreline is layered noise — a slow tension/sag
+// wave plus a faster intensity-scaled jitter — and the rope is drawn as a
+// ribbon whose thickness varies along its length (thin where taut, slack near
+// the losing side). The knot's midpoint follows the pull through a spring so
+// direction changes carry momentum instead of snapping.
 export default function Rope({ pull, iHost, iGuest }: RopeProps) {
-  const pathRef = useRef<SVGPathElement | null>(null)
-  const texRef = useRef<SVGPathElement | null>(null)
+  const ribbonRef = useRef<SVGPathElement | null>(null)
+  const coreRef = useRef<SVGPathElement | null>(null)
   const knotRef = useRef<SVGGElement | null>(null)
   const props = useRef({ pull, iHost, iGuest })
   props.current = { pull, iHost, iGuest }
@@ -28,32 +30,62 @@ export default function Rope({ pull, iHost, iGuest }: RopeProps) {
   useEffect(() => {
     let raf = 0
     let phase = 0
-    const render = () => {
+    let last = performance.now()
+    // spring state for the sliding midpoint
+    let midCur = (LEFT + RIGHT) / 2
+    let midVel = 0
+
+    const render = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
       const { pull: p, iHost: a, iGuest: b } = props.current
       const total = a + b
-      phase += 0.18 + total * 0.35
-      const freq = 0.012 + total * 0.02
-      const midX = (LEFT + RIGHT) / 2 + p * CENTER_SHIFT
+      phase += (0.16 + total * 0.3) * (dt * 60)
 
-      let d = ''
-      const steps = 48
+      // critically-ish damped spring toward the target midpoint
+      const target = (LEFT + RIGHT) / 2 + p * CENTER_SHIFT
+      const accel = 90 * (target - midCur) - 15 * midVel
+      midVel += accel * dt
+      midCur += midVel * dt
+
+      const baseFreq = 0.009
+      const jitterFreq = 0.045
+      const steps = 56
+      const top: string[] = []
+      const bottom: string[] = []
+      let core = ''
+
       for (let i = 0; i <= steps; i++) {
         const t = i / steps
         const x = LEFT + (RIGHT - LEFT) * t
-        // amplitude blends each end's shout; taper to zero at the anchored hands
+        const taper = Math.sin(Math.PI * t) // 0 at ends, 1 mid
         const localShout = a * (1 - t) + b * t
-        const taper = Math.sin(Math.PI * t) // 0 at ends, 1 in middle
-        const amp = (IDLE_AMP + localShout * MAX_AMP) * taper
-        // sag the rope toward the losing side a touch
-        const y = BASE_Y + Math.sin(x * freq + phase) * amp + Math.sin(t * Math.PI) * 10
-        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' '
-      }
-      pathRef.current?.setAttribute('d', d)
-      texRef.current?.setAttribute('d', d)
 
-      const midT = (midX - LEFT) / (RIGHT - LEFT)
-      const midY = BASE_Y + Math.sin(midT * Math.PI) * 10
-      knotRef.current?.setAttribute('transform', `translate(${midX.toFixed(1)} ${midY.toFixed(1)})`)
+        // layered noise: slow base wave + fast jitter (+ a second offset sine)
+        const base = Math.sin(x * baseFreq + phase * 0.4) * (IDLE_AMP + total * 7)
+        const jitter =
+          (Math.sin(x * jitterFreq + phase * 2.1) * 0.6 + Math.sin(x * jitterFreq * 1.7 + phase * 3.3) * 0.4) *
+          localShout *
+          MAX_AMP
+        const sag = Math.sin(t * Math.PI) * 11
+        const y = BASE_Y + (base + jitter) * taper + sag
+
+        // thickness: thin where taut, thicker/slack toward the losing side
+        const slack = Math.max(0, p) * (1 - t) * 3 + Math.max(0, -p) * t * 3
+        const halfW = 5.4 + (1 - localShout) * 2.1 + slack
+
+        top.push(`${x.toFixed(1)} ${(y - halfW).toFixed(1)}`)
+        bottom.push(`${x.toFixed(1)} ${(y + halfW).toFixed(1)}`)
+        core += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' '
+      }
+
+      const ribbon = 'M' + top.join(' L ') + ' L ' + bottom.reverse().join(' L ') + ' Z'
+      ribbonRef.current?.setAttribute('d', ribbon)
+      coreRef.current?.setAttribute('d', core)
+
+      const midT = (midCur - LEFT) / (RIGHT - LEFT)
+      const midY = BASE_Y + Math.sin(midT * Math.PI) * 11
+      knotRef.current?.setAttribute('transform', `translate(${midCur.toFixed(1)} ${midY.toFixed(1)})`)
 
       raf = requestAnimationFrame(render)
     }
@@ -84,9 +116,9 @@ export default function Rope({ pull, iHost, iGuest }: RopeProps) {
       {/* center-line threshold ticks */}
       <line x1="500" y1="40" x2="500" y2="180" stroke="#fbf3d9" strokeWidth="2" strokeDasharray="4 8" opacity="0.35" />
 
-      {/* rope: dark underlay for depth, then textured strand on top */}
-      <path ref={pathRef} d="" fill="none" stroke="#3d2610" strokeWidth="16" strokeLinecap="round" />
-      <path ref={texRef} d="" fill="none" stroke="url(#strands)" strokeWidth="11" strokeLinecap="round" />
+      {/* rope: dark core underlay for depth, then the textured variable-width ribbon */}
+      <path ref={coreRef} d="" fill="none" stroke="#3d2610" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+      <path ref={ribbonRef} d="" fill="url(#strands)" stroke="#5e3a12" strokeWidth="0.75" />
 
       {/* central knot + festival flag marking the balance point */}
       <g ref={knotRef}>

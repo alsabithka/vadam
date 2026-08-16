@@ -13,19 +13,33 @@ interface LobbyProps {
   onExit: () => void
 }
 
+type Calib = 'none' | 'quiet' | 'quiet-done' | 'shout' | 'done'
+
 export default function Lobby({ mode, role, roomCode, playerName, transport, onStart, onExit }: LobbyProps) {
   const [peer, setPeer] = useState(mode === 'local')
   const [mic, setMic] = useState<'idle' | 'granting' | 'granted' | 'denied'>('idle')
+  const [calib, setCalib] = useState<Calib>('none')
   const [connError, setConnError] = useState<string | null>(null)
   const voiceRef = useRef<VoiceController | null>(null)
+  const meterRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     transport.on('peer-join', () => setPeer(true))
     transport.connect().catch((e) => setConnError(e?.message ?? 'Connection failed'))
-    return () => {
-      // voice/transport handed off to Play on start; only stop if abandoned here
-    }
   }, [transport])
+
+  // Live mic meter so players can see calibration working.
+  useEffect(() => {
+    if (mic !== 'granted') return
+    let raf = 0
+    const tick = () => {
+      const v = voiceRef.current?.getIntensity() ?? 0
+      if (meterRef.current) meterRef.current.style.width = `${Math.round(v * 100)}%`
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [mic])
 
   const enableMic = async () => {
     setMic('granting')
@@ -37,7 +51,18 @@ export default function Lobby({ mode, role, roomCode, playerName, transport, onS
     }
   }
 
-  const ready = peer && mic === 'granted'
+  const measureQuiet = async () => {
+    setCalib('quiet')
+    await voiceRef.current?.calibrateNoiseFloor(1000)
+    setCalib('quiet-done')
+  }
+  const measureShout = async () => {
+    setCalib('shout')
+    await voiceRef.current?.calibratePeak(1800)
+    setCalib('done')
+  }
+
+  const ready = peer && mic === 'granted' && calib === 'done'
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center px-6 py-10">
@@ -72,6 +97,37 @@ export default function Lobby({ mode, role, roomCode, playerName, transport, onS
           />
         </div>
 
+        {/* ---- per-device mic calibration ---- */}
+        {mic === 'granted' && (
+          <div className="flex w-full flex-col gap-3 rounded-2xl border border-gold/25 bg-black/20 p-4">
+            <p className="font-display text-lg font-bold text-cream">Calibrate your mic</p>
+
+            {/* live level */}
+            <div className="h-3 w-full overflow-hidden rounded-full bg-black/40" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,.5)' }}>
+              <div ref={meterRef} className="h-full rounded-full" style={{ width: '0%', background: 'linear-gradient(90deg,#8ec3ef,#f4b528)' }} />
+            </div>
+
+            <CalibStep
+              index={1}
+              label="Stay quiet"
+              hint="Measures your room's background noise"
+              state={calib === 'none' ? 'ready' : calib === 'quiet' ? 'busy' : 'done'}
+              busyLabel="Listening…"
+              onRun={measureQuiet}
+              disabled={calib === 'quiet' || calib === 'shout'}
+            />
+            <CalibStep
+              index={2}
+              label='Shout "Arpooo!"'
+              hint="Sets your loudest level"
+              state={calib === 'done' ? 'done' : calib === 'shout' ? 'busy' : calib === 'quiet-done' ? 'ready' : 'locked'}
+              busyLabel="Shout now!"
+              onRun={measureShout}
+              disabled={calib !== 'quiet-done'}
+            />
+          </div>
+        )}
+
         {connError && <p className="font-body text-sm text-marigold">{connError}</p>}
 
         <button
@@ -95,6 +151,55 @@ function StatusRow({ ok, label, action }: { ok: boolean; label: string; action?:
         <span className="font-body text-sm text-cream/85">{label}</span>
       </div>
       {action}
+    </div>
+  )
+}
+
+function CalibStep({
+  index,
+  label,
+  hint,
+  state,
+  busyLabel,
+  onRun,
+  disabled,
+}: {
+  index: number
+  label: string
+  hint: string
+  state: 'locked' | 'ready' | 'busy' | 'done'
+  busyLabel: string
+  onRun: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${state === 'locked' ? 'opacity-45' : ''}`}>
+      <div className="flex items-center gap-3 text-left">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${
+            state === 'done' ? 'bg-green-400 text-mud-deep' : 'bg-cream/15 text-cream'
+          }`}
+        >
+          {state === 'done' ? '✓' : index}
+        </span>
+        <div>
+          <p className="font-display text-sm font-bold text-cream">{label}</p>
+          <p className="font-body text-xs text-cream/60">{hint}</p>
+        </div>
+      </div>
+      {state === 'done' ? (
+        <span className="font-body text-xs text-green-400">Done</span>
+      ) : (
+        <button
+          onClick={onRun}
+          disabled={disabled}
+          className={`rounded-lg px-3 py-1.5 font-display text-sm font-bold ${
+            state === 'busy' ? 'animate-pulse bg-marigold text-cream' : 'bg-gold text-mud-deep'
+          } disabled:cursor-not-allowed disabled:opacity-40`}
+        >
+          {state === 'busy' ? busyLabel : 'Measure'}
+        </button>
+      )}
     </div>
   )
 }
