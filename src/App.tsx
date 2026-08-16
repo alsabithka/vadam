@@ -7,15 +7,7 @@ import { LocalAiTransport, SupabaseTransport, type Transport } from "./lib/net"
 import { isSupabaseConfigured } from "./lib/supabase"
 import { makeRoomCode, type Winner } from "./lib/game"
 import type { VoiceController } from "./lib/voice"
-// Background music loaded at runtime so missing asset doesn't break the build.
-const bgMusic: string | undefined = (() => {
-  try {
-    // Vite import.meta.glob for the mp3 if it exists; falls back to undefined.
-    return undefined
-  } catch {
-    return undefined
-  }
-})()
+import bgMusic from "./imports/Aadeda_Aattam_Nee_Video_Song___Vadam_Vali_Song___Aadu_2___Shaan_Rahman___Jayasurya___Vijay_Babu.mp3"
 
 type Scene = "landing" | "lobby" | "play" | "win"
 
@@ -40,7 +32,10 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const unlockAudio = useCallback(() => {
-    audioRef.current?.play().catch(() => {})
+    const audio = audioRef.current
+    if (!audio) return
+    audio.volume = 0.5
+    audio.play().catch(() => {})
   }, [])
 
   const toggleMute = useCallback(() => {
@@ -124,8 +119,11 @@ export default function App() {
   }
 
   return (
-    <div className="h-full w-full">
-      {bgMusic && <audio ref={audioRef} src={bgMusic} loop />}
+    <div className="h-full w-full" onClick={unlockAudio}>
+      {/* Always-mounted audio element — persists through every scene change,
+          game restart, and win screen. Volume fixed at 50%. */}
+      <audio ref={audioRef} src={bgMusic} loop preload="auto"
+        onCanPlay={(e) => { (e.currentTarget as HTMLAudioElement).volume = 0.5 }} />
 
       {scene === "landing" && (
         <Landing
