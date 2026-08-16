@@ -235,8 +235,6 @@ export default function Play({
           </button>
         </div>
       )}
-
-      {active && <audio src={bgMusic} autoPlay loop />}
     </div>
   )
 }
