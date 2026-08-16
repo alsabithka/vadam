@@ -85,7 +85,7 @@ export default function Lobby({
 
   const handleStart = () => {
     if (role === "guest") return
-    const startAt = Date.now() + 4000
+    const startAt = Date.now() + 5000
     transport.sendMatchStart(startAt)
     onStart(voiceRef.current, startAt)
   }

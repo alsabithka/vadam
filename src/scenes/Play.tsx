@@ -46,10 +46,31 @@ export default function Play({
   muted,
   onToggleMute,
 }: PlayProps) {
-  const [count, setCount] = useState(() =>
-    Math.max(0, Math.ceil((startAt - Date.now()) / 1000)),
-  )
+  // Map the shared absolute timestamp to a 3→2→1→0 digit so BOTH clients
+  // show the same number at exactly the same wall-clock instant, regardless
+  // of when each client mounts (network latency, render delay, etc.).
+  //   remaining > 2000ms  →  3
+  //   1000 < remaining ≤ 2000ms  →  2
+  //   0 < remaining ≤ 1000ms  →  1
+  //   remaining ≤ 0  →  0  (game active)
+  const countdownDigit = (at: number) => {
+    const r = at - Date.now()
+    if (r <= 0) return 0
+    if (r <= 1000) return 1
+    if (r <= 2000) return 2
+    return 3
+  }
+
+  const [count, setCount] = useState(() => countdownDigit(startAt))
   const active = count === 0
+
+  // Poll at 50 ms. No dependency on `count` — a single stable interval runs
+  // the whole time and computes the digit from the absolute clock each tick.
+  useEffect(() => {
+    const t = setInterval(() => setCount(countdownDigit(startAt)), 50)
+    return () => clearInterval(t)
+  }, [startAt])
+
   const { state, anim, peerConnected, peerLeft } = useTugGame({
     role,
     transport,
@@ -59,16 +80,6 @@ export default function Play({
 
   const syncing =
     mode === "online" && !peerConnected && role === "guest" && !active
-
-  // Single stable interval — no recreation on every tick avoids missing the 0 transition.
-  useEffect(() => {
-    if (count === 0) return
-    const t = setInterval(() => {
-      setCount(Math.max(0, Math.ceil((startAt - Date.now()) / 1000)))
-    }, 50)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startAt])
 
   useEffect(() => {
     if (state.status === "over" && state.winner) {
@@ -176,22 +187,19 @@ export default function Play({
         </button>
       </div>
 
-      {/* countdown overlay
-          display = min(count, 3) so both players always see 3→2→1 even if
-          one client mounts slightly late and starts at count=4. The `key`
-          on the displayed value ensures the pop-in animation only fires on
-          actual digit changes (4→3 is silent, 3→2→1 each animate). */}
+      {/* Countdown overlay — count is already 3/2/1/0 based on absolute
+          timestamps, so both clients display the same digit at the same instant. */}
       {count > 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-sm">
           <span
-            key={Math.min(count, 3)}
+            key={count}
             className="animate-rise font-display font-extrabold leading-none text-gold"
             style={{
               fontSize: "22vw",
               textShadow: "0 6px 0 #6b3f22, 0 0 60px rgba(244,181,40,0.4)",
             }}
           >
-            {Math.min(count, 3)}
+            {count}
           </span>
         </div>
       )}
